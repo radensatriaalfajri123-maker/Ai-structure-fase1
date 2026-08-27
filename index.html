@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Online AI Database Bot Server</title>
+    <title>Global AI Database Server</title>
+    <!-- Memuat Library Supabase via CDN secara instan -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -75,7 +77,7 @@
 </head>
 <body>
     <div class="container">
-        <h2>=== ONLINE AI DATABASE BOT SERVER IS READY ===</h2>
+        <h2>=== GLOBAL AI DATABASE SERVER IS READY ===</h2>
         
         <div class="petunjuk">
             Please use <code>/answer ai [something we just indexed] in [sentence we want]</code><br><br>
@@ -90,17 +92,18 @@
 
         <div class="hasil-box" id="hasilBox" style="display: none;">
             <label>Server Response:</label>
-            <p id="responTeks"></p>
+            <p id="responTeks">Connecting to database...</p>
         </div>
     </div>
 
     <script>
-        // Membaca atau membuat database memori bot secara aman
-        if (!localStorage.getItem('memori_bot')) {
-            localStorage.setItem('memori_bot', JSON.stringify({}));
-        }
+        // ganti URL dan KEY ini dengan data proyek Supabase kamu sendiri
+        const SUPABASE_URL = "https://PROJECT_ID_KAMU.supabase.co"; 
+        const SUPABASE_KEY = "API_KEY_ANON_PUBLIC_KAMU"; 
+        
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        function prosesServer() {
+        async function prosesServer() {
             const inputElement = document.getElementById('pesan');
             const pesanUser = inputElement.value.trim();
             const hasilBox = document.getElementById('hasilBox');
@@ -108,10 +111,11 @@
 
             if (!pesanUser) return;
 
-            let database = JSON.parse(localStorage.getItem('memori_bot'));
             hasilBox.style.display = "block";
+            responTeks.innerText = "Processing...";
+            responTeks.className = "";
 
-            // --- JALUR 1: PERINTAH /answer ai ---
+            // --- JALUR 1: PERINTAH DAFTAR (/answer ai) ---
             if (pesanUser.startsWith('/answer ai ')) {
                 let teksPerintah = pesanUser.substring(11).trim();
                 
@@ -120,11 +124,17 @@
                     let tanya = bagian[0].trim().toLowerCase();
                     let jawab = bagian.slice(1).join(' in ').trim(); 
                     
-                    database[tanya] = jawab;
-                    localStorage.setItem('memori_bot', JSON.stringify(database));
-                    
-                    responTeks.innerText = `✓ sentence '${pesanUser}' successfully indexed!`;
-                    responTeks.className = "status-sukses";
+                    // Simpan atau ganti data ke Cloud Database pusat
+                    const { error } = await supabase
+                        .from('memori_bot')
+                        .upsert({ pertanyaan: tanya, jawaban: jawab }, { onConflict: 'pertanyaan' });
+
+                    if (error) {
+                        responTeks.innerText = `❌ Error: ${error.message}`;
+                    } else {
+                        responTeks.innerText = `✓ sentence '${pesanUser}' successfully indexed to cloud database!`;
+                        responTeks.className = "status-sukses";
+                    }
                 } else {
                     responTeks.innerText = "⚠ Wrong format! Use: /answer ai [question] in [answer]";
                     responTeks.className = "status-baru";
@@ -134,17 +144,26 @@
             } else {
                 let kataKunci = pesanUser.toLowerCase();
                 
-                if (database[kataKunci]) {
-                    responTeks.innerText = `🤖 [AI]: ${database[kataKunci]}`;
+                // Cari data di database pusat milik bersama
+                const { data, error } = await supabase
+                    .from('memori_bot')
+                    .select('jawaban')
+                    .eq('pertanyaan', kataKunci)
+                    .single();
+
+                if (data) {
+                    responTeks.innerText = `🤖 [AI]: ${data.jawaban}`;
                     responTeks.className = "status-bot";
                 } else {
                     let jumlahKata = pesanUser.split(/\s+/).length;
                     let tipe = (jumlahKata === 1) ? "word" : "sentence";
                     
-                    database[kataKunci] = pesanUser;
-                    localStorage.setItem('memori_bot', JSON.stringify(database));
+                    // Jika belum terdaftar, otomatis disimpan di cloud database agar bisa diakses orang lain
+                    await supabase
+                        .from('memori_bot')
+                        .insert({ pertanyaan: kataKunci, jawaban: pesanUser });
                     
-                    responTeks.innerText = `✓ ${tipe} '${pesanUser}' successfully indexed!`;
+                    responTeks.innerText = `✓ ${tipe} '${pesanUser}' successfully indexed globally!`;
                     responTeks.className = "status-baru";
                 }
             }
@@ -156,9 +175,6 @@
                 prosesServer();
             }
         });
-
-        // KODE PERINTAH PEMBERSIH SUDAH DIHAPUS TOTAL AGAR DATA AWET PERMANEN
     </script>
 </body>
 </html>
-
