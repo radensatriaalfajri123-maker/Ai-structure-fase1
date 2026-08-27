@@ -4,8 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Global AI Database Server</title>
-    <!-- Memuat Library Supabase via CDN secara instan -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Memuat Library Firebase JS SDK v9+ (Compat Mode) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -97,11 +99,26 @@
     </div>
 
     <script>
-        // ganti URL dan KEY ini dengan data proyek Supabase kamu sendiri
-        const SUPABASE_URL = "https://PROJECT_ID_KAMU.supabase.co"; 
-        const SUPABASE_KEY = "API_KEY_ANON_PUBLIC_KAMU"; 
-        
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Konfigurasi Firebase Lengkap
+        const firebaseConfig = {
+            apiKey: "AIzaSyA7A_WUnqgyJsmG-FH6Oo3a4w2p4rOn__s",
+            authDomain: "ai-project-fase1.firebaseapp.com",
+            databaseURL: "https://ai-project-fase1-default-rtdb.firebaseio.com",
+            projectId: "ai-project-fase1",
+            storageBucket: "ai-project-fase1.firebasestorage.app",
+            messagingSenderId: "842443540765",
+            appId: "1:842443540765:web:3d0c746d99af",
+            measurementId: "G-4MEP3EFDXY"
+        };
+
+        // Inisialisasi Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Helper sanitasi Key terlarang
+        function cleanKey(text) {
+            return text.replace(/[.#$\[\]\/]/g, "_");
+        }
 
         async function prosesServer() {
             const inputElement = document.getElementById('pesan');
@@ -121,19 +138,19 @@
                 
                 if (teksPerintah.includes(' in ')) {
                     let bagian = teksPerintah.split(' in ');
-                    let tanya = bagian[0].trim().toLowerCase();
+                    let tanya = cleanKey(bagian[0].trim().toLowerCase());
                     let jawab = bagian.slice(1).join(' in ').trim(); 
                     
-                    // Simpan atau ganti data ke Cloud Database pusat
-                    const { error } = await supabase
-                        .from('memori_bot')
-                        .upsert({ pertanyaan: tanya, jawaban: jawab }, { onConflict: 'pertanyaan' });
+                    try {
+                        await database.ref('memori_bot/' + tanya).set({
+                            pertanyaan: tanya,
+                            jawaban: jawab
+                        });
 
-                    if (error) {
-                        responTeks.innerText = `❌ Error: ${error.message}`;
-                    } else {
                         responTeks.innerText = `✓ sentence '${pesanUser}' successfully indexed to cloud database!`;
                         responTeks.className = "status-sukses";
+                    } catch (error) {
+                        responTeks.innerText = `❌ Error: ${error.message}`;
                     }
                 } else {
                     responTeks.innerText = "⚠ Wrong format! Use: /answer ai [question] in [answer]";
@@ -142,29 +159,29 @@
 
             // --- JALUR 2: OBROLAN / KATA KUNCI BIASA ---
             } else {
-                let kataKunci = pesanUser.toLowerCase();
+                let kataKunci = cleanKey(pesanUser.toLowerCase());
                 
-                // Cari data di database pusat milik bersama
-                const { data, error } = await supabase
-                    .from('memori_bot')
-                    .select('jawaban')
-                    .eq('pertanyaan', kataKunci)
-                    .single();
-
-                if (data) {
-                    responTeks.innerText = `🤖 [AI]: ${data.jawaban}`;
-                    responTeks.className = "status-bot";
-                } else {
-                    let jumlahKata = pesanUser.split(/\s+/).length;
-                    let tipe = (jumlahKata === 1) ? "word" : "sentence";
+                try {
+                    const snapshot = await database.ref('memori_bot/' + kataKunci).once('value');
                     
-                    // Jika belum terdaftar, otomatis disimpan di cloud database agar bisa diakses orang lain
-                    await supabase
-                        .from('memori_bot')
-                        .insert({ pertanyaan: kataKunci, jawaban: pesanUser });
-                    
-                    responTeks.innerText = `✓ ${tipe} '${pesanUser}' successfully indexed globally!`;
-                    responTeks.className = "status-baru";
+                    if (snapshot.exists()) {
+                        const data = snapshot.val();
+                        responTeks.innerText = `🤖 [AI]: ${data.jawaban}`;
+                        responTeks.className = "status-bot";
+                    } else {
+                        let jumlahKata = pesanUser.split(/\s+/).length;
+                        let tipe = (jumlahKata === 1) ? "word" : "sentence";
+                        
+                        await database.ref('memori_bot/' + kataKunci).set({
+                            pertanyaan: kataKunci,
+                            jawaban: pesanUser
+                        });
+                        
+                        responTeks.innerText = `✓ ${tipe} '${pesanUser}' successfully indexed globally!`;
+                        responTeks.className = "status-baru";
+                    }
+                } catch (error) {
+                    responTeks.innerText = `❌ Error: ${error.message}`;
                 }
             }
             inputElement.value = "";
