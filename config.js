@@ -9,5 +9,8 @@ const firebaseConfig = {
     measurementId: "G-4MEP3EFDXY"
 };
 
+// Inisialisasi Firebase
 firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+
+// Tempelkan ke window supaya dibaca secara global oleh HTML
+window.database = firebase.database();
